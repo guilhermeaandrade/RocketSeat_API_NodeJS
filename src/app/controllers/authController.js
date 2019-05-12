@@ -28,7 +28,6 @@ router.post("/register", async (req, res) => {
     res.status(400).send({ error: "Registration failed" });
   }
 });
-
 router.post("/authenticate", async (req, res) => {
   const { email, password } = req.body;
   const user = await User.findOne({ email }).select("+password");
@@ -44,7 +43,6 @@ router.post("/authenticate", async (req, res) => {
     token: generateToken({ id: user.id })
   });
 });
-
 router.post("/forgot_password", async (req, res) => {
   const { email } = req.body;
   try {
@@ -55,7 +53,7 @@ router.post("/forgot_password", async (req, res) => {
     const now = new Date();
     now.setHours(now.getHours() + 1);
 
-    await User.findOneAndUpdate(user.id, {
+    await User.findByIdAndUpdate(user.id, {
       $set: {
         passwordResetToken: token,
         passwordResetExpires: now
@@ -70,18 +68,39 @@ router.post("/forgot_password", async (req, res) => {
         context: { token }
       },
       err => {
-        if (err) {
-          console.log(err);
+        if (err)
           return res
             .status(400)
             .send({ error: "Cannot send forgot password email" });
-        }
         return res.send();
       }
     );
   } catch (err) {
-    console.log(err);
     res.status(400).send({ error: "Erro on forgot password, try again!" });
+  }
+});
+router.post("/reset_password", async (req, res) => {
+  const { email, token, password } = req.body;
+  try {
+    const user = await User.findOne({ email }).select(
+      "+passwordResetToken passwordResetExpires"
+    );
+    if (!user) return res.status(400).send({ error: "User not found" });
+
+    if (token != user.passwordResetToken)
+      return res.status(400).send({ error: "Token invalid" });
+
+    const now = new Date();
+    if (now > user.passwordResetExpires)
+      return res
+        .status(400)
+        .send({ error: "Token expired, generate a new one" });
+
+    user.password = password;
+    await user.save();
+    res.send();
+  } catch (error) {
+    res.status(400).send({ error: "Cannot reset password, try again!" });
   }
 });
 
